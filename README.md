@@ -1,5 +1,5 @@
-# dsgen38.10
-Simple digital signature generator based on standart GOST 38.10-2018
+# sds_gen
+Simple digital signature generator based on standart GOST 34.10-2018
 
 This program is used to generate 256bit digital signature to the end of the file
 
