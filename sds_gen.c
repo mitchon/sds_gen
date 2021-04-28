@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <gmp.h>
 #include "elipt_cur.h"
@@ -53,21 +54,11 @@ int GenerateKeys (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t y
 	//добавить генератор
 }
 
-//открыть целевой файл
-int OpenTargetFile(char* path, FILE *file)
-{
-	if ((file = fopen(path, "r")) == NULL)
-	{
-		printf("Error reading target file");
-		return -1;
-	}
-	return 0;
-}
-
 //добавление ЦП к файлу
-int AddDSToFile(char* ds, FILE *file)
+void AddDSToFile(char* ds, FILE *file)
 {
-	return 0;
+	fseek(file, 0, SEEK_END);
+    fputs(ds, file);
 }
 
 //получение ключей из таблицы пользователя
@@ -120,8 +111,24 @@ int GetUserKeys(char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	return 0;
 }
 
+void GenerateHashFromFile(FILE *file, unsigned char *h)
+{
+	fseek(file, 0, SEEK_END);
+	long fsize = ftell(file);
+	fseek(file, 0, SEEK_SET);
+	unsigned char *content = (unsigned char *)malloc(fsize + 1);
+	fread(content, 1, fsize, file);
+	
+	h=hash256(content, fsize);
+    printf("h: ");
+    for (int i=0; i<32; i++)
+        printf("%x ", h[i]);
+	printf("\n");
+	free(content);
+}
+
 //генератор ЦП
-int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP, mpz_t d, mpz_t xQ, mpz_t yQ, unsigned char *ds)
+int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP, mpz_t d, mpz_t xQ, mpz_t yQ, unsigned char *ds, FILE *file)
 {
 	mpz_t e, alpha, k, xC, yC, r, s, tmp;
 	gmp_randstate_t state;
@@ -136,28 +143,22 @@ int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP,
 	mpz_init(s);
 	mpz_init(tmp);
 	gmp_randinit_default(state);
+	gmp_randseed(state, d);
 
 	//получение хеш-кода (пока что из примера стандарта)
-	unsigned char msg[]={0xfb,0xe2,0xe5,0xf0,0xee,0xe3,0xc8,0x20,0xfb,0xea,0xfa,0xeb,0xef,0x20,0xff,0xfb,0xf0,0xe1,0xe0,0xf0,0xf5,0x20,0xe0,0xed,0x20,0xe8,0xec,0xe0,0xeb,0xe5,0xf0,0xf2,0xf1,0x20,0xff,0xf0,0xee,0xec,0x20,0xf1,0x20,0xfa,0xf2,0xfe,0xe5,0xe2,0x20,0x2c,0xe8,0xf6,0xf3,0xed,0xe2,0x20,0xe8,0xe6,0xee,0xe1,0xe8,0xf0,0xf2,0xd1,0x20,0x2c,0xe8,0xf0,0xf2,0xe5,0xe2,0x20,0xe5,0xd1};
-    long len = sizeof(msg)/sizeof(msg[0]);
-	h=hash256(msg, len);
-    /*printf("h: ");
-    for (int i=0; i<32; i++)
-        printf("%x ", h[i]);
-	printf("\n");*/
+	GenerateHashFromFile(file, h);
 	//получить альфа, число, двоичным представлением которого является h
 	mpz_import(alpha, 32, 1, 1, 1, 0, h);
-	//gmp_printf("alpha = %Zx\n", alpha);
+	gmp_printf("alpha = %Zx\n", alpha);
 
-	//получить е (пока что из примера)
-	//mpz_mod(e, alpha, q);
-	mpz_set_str(e, "2DFBC1B372D89A1188C09C52E0EEC61FCE52032AB1022E8E67ECE6672B043EE5", 16);
+	//получить e
+	mpz_mod(e, alpha, q);
 	//генерировать k, если r или s равны 0
 	while (mpz_cmp_si(r, 0) == 0 || mpz_cmp_si(s, 0) == 0)
 	{
-		//получить k (пока что из примера)
-		//mpz_urandomb(k, state, 256);
-		mpz_set_str(k, "77105C9B20BCD3122823C8CF6FCC7B956DE33814E95B7FE64FED924594DCEAB3", 16);
+		//получить k
+		mpz_urandomb(k, state, 256);
+		gmp_printf("k = %Zx\n", k);
 		//C=k*P
 		PointMul(p, a, xP, yP, k, xC, yC);
 		//r=xCmodq
@@ -189,6 +190,7 @@ int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP,
 		}
 	}
 
+	free(h);
 	mpz_clear(e);
 	mpz_clear(alpha);
 	mpz_clear(k);
@@ -197,6 +199,7 @@ int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP,
 	mpz_clear(r);
 	mpz_clear(s);
 	mpz_clear(tmp);
+	gmp_randclear(state);
 	return 0;
 }
 
@@ -278,14 +281,21 @@ int main(int argc, char** argv)
 			//получение ключей из файла пользователя
 			fail += GetUserKeys(argv[2], d, xQ, yQ);
 			//открытие целевого файла
-			fail += OpenTargetFile(argv[3], target);
+			if ((target = fopen(argv[3], "r+b")) == NULL)
+			{
+				printf("Error reading target file");
+				fail += 1;
+			}
+    		printf("%x\n", target);
+
 			if (fail == 0)
 			{
 				//генерация подписи, добавление к файлу
 				unsigned char ds[64];
-				GenerateDS(p, a, b, m, q, xP, yP, d, xQ, yQ, ds);
+				GenerateDS(p, a, b, m, q, xP, yP, d, xQ, yQ, ds, target);
 				AddDSToFile(ds, target);
 			}
+			fclose(target);
 		}
 		//если параметры не получены
 		else
