@@ -4,6 +4,7 @@
 #include <gmp.h>
 #include "elipt_cur.h"
 #include "hash_lib.h"
+#include "time.h"
 
 //очистить все переменные, используемые gmp
 void Clear_GMP (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP, mpz_t d, mpz_t xQ, mpz_t yQ)
@@ -47,11 +48,101 @@ char GetParams (char* path, mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t x
 	return 0;
 }
 
-//генератор ключей (не работает)
+//генератор ключей
 int GenerateKeys (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP, char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 {
+	gmp_randstate_t state;
+	gmp_randinit_default(state);
+	gmp_randseed_ui(state, time(NULL));
+	mpz_urandomm(d, state, q);
+	PointMul(p, a, xP, yP, d, xQ, yQ);
+	gmp_printf("d = %Zx\n", d);
+	gmp_printf("xQ = %Zx\n", xQ);
+	gmp_printf("yQ = %Zx\n", yQ);
 	return 0;
-	//добавить генератор
+}
+
+int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
+{
+	FILE *accounts, *public;
+	char loginfound = 0;
+	char buffer[256];
+	int num = 0;
+	if ((accounts = fopen("./accounts.sdsa", "rb+")) == NULL)
+	{
+		printf("Error. File \"accounts.sdsa\" not found\n");
+		return -1;
+	}
+	while (feof(accounts) == 0 && loginfound == 0)
+	{
+		fgets(buffer, 256, accounts);
+		if (num % 4 == 0)
+		{
+			for (int i=0; i<256; i++)
+			{
+				if (buffer[i] == 0x0A)
+					buffer[i]=0;
+			}
+			if (strcmp(buffer, login) == 0)
+				loginfound = 1;
+		}
+		num++;
+	}
+
+	if (loginfound == 1 && num != 0)
+	{
+		printf("Error. User %s already exists\n", login);
+		return -1;
+	}
+
+	fseek(accounts, 0, SEEK_END);
+	fputs(login, accounts);
+	fputs("\n", accounts);
+	mpz_out_str(accounts, 16, d);
+	fputs("\n", accounts);
+	mpz_out_str(accounts, 16, xQ);
+	fputs("\n", accounts);
+	mpz_out_str(accounts, 16, yQ);
+	fputs("\n", accounts);
+	fclose(accounts);
+
+	if ((public = fopen("./public_accounts.sdspa", "rb+")) == NULL)
+	{
+		printf("Error. File \"public_accounts.sdspa\" not found\n");
+		return -1;
+	}
+	while (feof(public) == 0 && loginfound == 0)
+	{
+		fgets(buffer, 256, public);
+		if (num % 2 == 0)
+		{
+			for (int i=0; i<256; i++)
+			{
+				if (buffer[i] == 0x0A)
+					buffer[i]=0;
+			}
+			if (strcmp(buffer, login) == 0)
+				loginfound = 1;
+		}
+		num++;
+	}
+
+	if (loginfound == 1 && num != 0)
+	{
+		printf("Error. User %s already exists\n", login);
+		return -1;
+	}
+
+	fseek(public, 0, SEEK_END);
+	fputs(login, public);
+	fputs("\n", public);
+	mpz_out_str(public, 16, xQ);
+	fputs("\n", public);
+	mpz_out_str(public, 16, yQ);
+	fputs("\n", public);
+	fclose(public);
+	printf("Keys generated!\n");
+	return 0;
 }
 
 //добавление ЦП к файлу
@@ -59,6 +150,7 @@ void AddDSToFile(char* ds, FILE *file)
 {
 	fseek(file, 0, SEEK_END);
     fputs(ds, file);
+	printf("DS added!");
 }
 
 //получение ключей из таблицы пользователя
@@ -68,7 +160,7 @@ int GetUserKeys(char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	char loginfound = 0;
 	int num = 0;
 	char buffer[256];
-	if ((keys = fopen("accounts.sdsa", "r")) == NULL)
+	if ((keys = fopen("accounts.sdsa", "rb")) == NULL)
 	{
 		printf("Error reading accounts info");
 		return -1;
@@ -143,10 +235,11 @@ int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP,
 	mpz_init(s);
 	mpz_init(tmp);
 	gmp_randinit_default(state);
-	gmp_randseed(state, d);
+	gmp_randseed_ui(state, time(NULL));
 
 	//получение хеш-кода (пока что из примера стандарта)
 	GenerateHashFromFile(file, h);
+	printf("a\n");
 	//получить альфа, число, двоичным представлением которого является h
 	mpz_import(alpha, 32, 1, 1, 1, 0, h);
 	gmp_printf("alpha = %Zx\n", alpha);
@@ -253,10 +346,10 @@ int main(int argc, char** argv)
 	//создание пользователя, генерация ключей (пока не работает)
 	if (strcmp(argv[1], "-ug") == 0 && argc == 3)
 	{
-		printf("It doesnt work right now");
 		if (parfstatus == 0)
 		{
 			GenerateKeys(p, a, b, m, q, xP, yP, argv[2], d, xQ, yQ);
+			SaveKeys(argv[2], d, xQ, yQ);
 		}
 		else
 			printf("Get the parameters first!");
@@ -283,10 +376,9 @@ int main(int argc, char** argv)
 			//открытие целевого файла
 			if ((target = fopen(argv[3], "r+b")) == NULL)
 			{
-				printf("Error reading target file");
+				printf("Error reading target file\n");
 				fail += 1;
 			}
-    		printf("%x\n", target);
 
 			if (fail == 0)
 			{
