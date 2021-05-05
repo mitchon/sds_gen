@@ -61,7 +61,7 @@ int GenerateKeys (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t y
 	gmp_printf("yQ = %Zx\n", yQ);
 	return 0;
 }
-
+//сохранение ключей в файлы с персональными и публичными ключами, проверка на оригинальность пользователя
 int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 {
 	FILE *accounts, *public;
@@ -114,7 +114,7 @@ int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	while (feof(public) == 0 && loginfound == 0)
 	{
 		fgets(buffer, 256, public);
-		if (num % 2 == 0)
+		if (num % 3 == 0)
 		{
 			for (int i=0; i<256; i++)
 			{
@@ -237,9 +237,8 @@ int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP,
 	gmp_randinit_default(state);
 	gmp_randseed_ui(state, time(NULL));
 
-	//получение хеш-кода (пока что из примера стандарта)
+	//получение хеш-кода
 	GenerateHashFromFile(file, h);
-	printf("a\n");
 	//получить альфа, число, двоичным представлением которого является h
 	mpz_import(alpha, 32, 1, 1, 1, 0, h);
 	gmp_printf("alpha = %Zx\n", alpha);
