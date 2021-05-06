@@ -146,10 +146,11 @@ int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 }
 
 //добавление ЦП к файлу
-void AddDSToFile(char* ds, FILE *file)
+void AddDSToFile(unsigned char* ds, FILE *file)
 {
 	fseek(file, 0, SEEK_END);
-    fputs(ds, file);
+	for (int i = 0; i<64; i++)
+		fputc(ds[i], file);
 	printf("DS added!");
 }
 
@@ -189,10 +190,6 @@ int GetUserKeys(char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 		return -1;
 	}
 	
-	mpz_init(d);
-	mpz_init(xQ);
-	mpz_init(yQ);
-	
 	mpz_inp_str (d, keys, 16);
 	mpz_inp_str (xQ, keys, 16);
 	mpz_inp_str (yQ, keys, 16);
@@ -203,13 +200,17 @@ int GetUserKeys(char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	return 0;
 }
 
-void GenerateHashFromFile(FILE *file, unsigned char *h)
+unsigned char *GenerateHashFromFile(FILE *file)
 {
+	unsigned char *h;
 	fseek(file, 0, SEEK_END);
 	long fsize = ftell(file);
 	fseek(file, 0, SEEK_SET);
-	unsigned char *content = (unsigned char *)malloc(fsize + 1);
+	unsigned char *content = (unsigned char *)malloc(fsize);
 	fread(content, 1, fsize, file);
+	for (int i=0; i<(fsize); i++)
+        printf("%x ", content[i]);
+	printf("\n");
 	
 	h=hash256(content, fsize);
     printf("h: ");
@@ -217,6 +218,7 @@ void GenerateHashFromFile(FILE *file, unsigned char *h)
         printf("%x ", h[i]);
 	printf("\n");
 	free(content);
+	return h;
 }
 
 //генератор ЦП
@@ -238,7 +240,7 @@ int GenerateDS (mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t xP, mpz_t yP,
 	gmp_randseed_ui(state, time(NULL));
 
 	//получение хеш-кода
-	GenerateHashFromFile(file, h);
+	h = GenerateHashFromFile(file);
 	//получить альфа, число, двоичным представлением которого является h
 	mpz_import(alpha, 32, 1, 1, 1, 0, h);
 	gmp_printf("alpha = %Zx\n", alpha);
@@ -373,7 +375,7 @@ int main(int argc, char** argv)
 			//получение ключей из файла пользователя
 			fail += GetUserKeys(argv[2], d, xQ, yQ);
 			//открытие целевого файла
-			if ((target = fopen(argv[3], "r+b")) == NULL)
+			if ((target = fopen(argv[3], "r+")) == NULL)
 			{
 				printf("Error reading target file\n");
 				fail += 1;
@@ -384,7 +386,10 @@ int main(int argc, char** argv)
 				//генерация подписи, добавление к файлу
 				unsigned char ds[64];
 				GenerateDS(p, a, b, m, q, xP, yP, d, xQ, yQ, ds, target);
-				AddDSToFile(ds, target);
+				if ((target = freopen(argv[3], "r+", target)) == NULL)
+					printf("Error reading target file\n");
+				else
+					AddDSToFile(ds, target);
 			}
 			fclose(target);
 		}
