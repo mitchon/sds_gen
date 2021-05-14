@@ -323,7 +323,7 @@ unsigned char *hash256(unsigned char *msg, long len)
         Sigma=Add512(Sigma, curmas);
     }
 
-    for(int i=0; i<=64; i++)
+    for(int i=0; i<64; i++)
     {
         if (i < len)
             curmas[63-i]=msg[len-1-i];
