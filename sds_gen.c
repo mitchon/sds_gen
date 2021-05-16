@@ -27,7 +27,7 @@ char GetParams (char* path, mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t x
 	FILE* params;
 	if ((params = fopen(path, "r")) == NULL)
 	{
-		printf("Error. File \"ds_params.sdsp\" not found. Generate or import parameters file\n");
+		printf("Error. File \"ds_params\" not found. Generate or import parameters file\n");
 		return -1;
 	}
 	mpz_inp_str (p, params, 16);
@@ -68,9 +68,9 @@ int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	char loginfound = 0;
 	char buffer[256];
 	int num = 0;
-	if ((accounts = fopen("./accounts.sdsa", "rb+")) == NULL)
+	if ((accounts = fopen("/usr/local/etc/sds/accounts", "rb+")) == NULL)
 	{
-		printf("Error. File \"accounts.sdsa\" not found\n");
+		printf("Error. File \"accounts\" not found\n");
 		return -1;
 	}
 	while (feof(accounts) == 0 && loginfound == 0)
@@ -106,9 +106,9 @@ int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	fputs("\n", accounts);
 	fclose(accounts);
 
-	if ((public = fopen("./public_accounts.sdspa", "rb+")) == NULL)
+	if ((public = fopen("/usr/local/etc/sds/public_accounts", "rb+")) == NULL)
 	{
-		printf("Error. File \"public_accounts.sdspa\" not found\n");
+		printf("Error. File \"public_accounts\" not found\n");
 		return -1;
 	}
 	while (feof(public) == 0 && loginfound == 0)
@@ -151,7 +151,7 @@ void AddDSToFile(unsigned char* ds, FILE *file)
 	fseek(file, 0, SEEK_END);
 	for (int i = 0; i<64; i++)
 		fputc(ds[i], file);
-	printf("DS added!");
+	printf("DS added!\n");
 }
 
 //получение ключей из таблицы пользователя
@@ -161,9 +161,9 @@ int GetUserKeys(char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	char loginfound = 0;
 	int num = 0;
 	char buffer[256];
-	if ((keys = fopen("accounts.sdsa", "rb")) == NULL)
+	if ((keys = fopen("/usr/local/etc/sds/accounts", "rb")) == NULL)
 	{
-		printf("Error reading accounts info");
+		printf("Error reading accounts info\n");
 		return -1;
 	}
 	while (feof(keys) == 0 && loginfound == 0)
@@ -208,9 +208,6 @@ unsigned char *GenerateHashFromFile(FILE *file)
 	fseek(file, 0, SEEK_SET);
 	unsigned char *content = (unsigned char *)malloc(fsize);
 	fread(content, 1, fsize, file);
-	for (int i=0; i<(fsize); i++)
-        printf("%x ", content[i]);
-	printf("\n");
 	
 	h=hash256(content, fsize);
     printf("h: ");
@@ -324,7 +321,7 @@ int main(int argc, char** argv)
 	//-h с лишними параметрами
 	else if (strcmp(argv[1], "-h") == 0 && argc != 2)
 	{
-		printf("Option \"-h\" does not support any other arguments");
+		printf("Option \"-h\" does not support any other arguments\n");
 		return 0;
 	}
 
@@ -342,7 +339,7 @@ int main(int argc, char** argv)
 	//статус открытого файла
 	char parfstatus = 0;
 	//получение параметров из файла
-	parfstatus += GetParams("ds_params.sdsp", p, a, b, m, q, xP, yP);
+	parfstatus += GetParams("/usr/local/etc/sds/ds_params", p, a, b, m, q, xP, yP);
 
 	//создание пользователя, генерация ключей (пока не работает)
 	if (strcmp(argv[1], "-ug") == 0 && argc == 3)
@@ -353,14 +350,14 @@ int main(int argc, char** argv)
 			SaveKeys(argv[2], d, xQ, yQ);
 		}
 		else
-			printf("Get the parameters first!");
+			printf("Get the parameters first!\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
 	}
 	//неверное кол-во параметров
 	else if (strcmp(argv[1], "-ug") == 0 && argc != 3)
 	{
-		printf("Incorrect number of arguments");
+		printf("Incorrect number of arguments\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
 	}
@@ -389,13 +386,15 @@ int main(int argc, char** argv)
 				if ((target = freopen(argv[3], "r+", target)) == NULL)
 					printf("Error reading target file\n");
 				else
+				{
 					AddDSToFile(ds, target);
+					fclose(target);
+				}
 			}
-			fclose(target);
 		}
 		//если параметры не получены
 		else
-			printf("Get the parameters first!");
+			printf("Get the parameters first!\n");
 		//очистить все переменные, используемые gmp
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
@@ -403,7 +402,7 @@ int main(int argc, char** argv)
 	//кол-во параметров неверно
 	else if (strcmp(argv[1], "-ds") == 0 && argc != 4)
 	{
-		printf("Incorrect number of arguments");
+		printf("Incorrect number of arguments\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
 	}
@@ -411,26 +410,26 @@ int main(int argc, char** argv)
 	//генерация случ. параметров
 	if (strcmp(argv[1], "-p") == 0 && argc == 2)
 	{
-		printf("It doesnt work right now");
+		printf("It doesnt work right now\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
 	}
 	//параметры из файла
 	else if (strcmp(argv[1], "-p") == 0 && argc == 3)
 	{
-		printf("It doesnt work right now");
+		printf("It doesnt work right now\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
 	}
 	else if (strcmp(argv[1], "-p") == 0 && argc > 3)
 	{
-		printf("Incorrect number of arguments");
+		printf("Incorrect number of arguments\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 		return 0;
 	}
 
 	//параметр не найден
-	printf("No such parameter. Use \"-h\" to open list of options");
+	printf("No such parameter. Use \"-h\" to open list of options\n");
 	//очистить все переменные, используемые gmp
 	Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
 	return 0;
