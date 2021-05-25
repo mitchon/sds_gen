@@ -45,7 +45,13 @@ char GetParams (char* path, mpz_t p, mpz_t a, mpz_t b, mpz_t m, mpz_t q, mpz_t x
 			"xP = %Zx\n"
 			"yP = %Zx\n", p, a, b, m, q, xP, yP);
 	fclose(params);
-	return 0;
+	if (mpz_cmp_si(p, 0) > 0 && mpz_cmp_si(a, 0) > 0 && mpz_cmp_si(b, 0) > 0 && mpz_cmp_si(m, 0) > 0 && mpz_cmp_si(q, 0) > 0 && mpz_cmp_si(xP, 0) > 0 && mpz_cmp_si(yP, 0) > 0)
+		return 0;
+	else
+	{
+		printf("Error. Parameters are incompatible\n");
+		return -1;
+	}
 }
 
 //генератор ключей
@@ -73,10 +79,75 @@ int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 		printf("Error. File \"accounts\" not found\n");
 		return -1;
 	}
+
+	if ((public = fopen("/usr/local/etc/sds/public_accounts", "rb+")) == NULL)
+	{
+		printf("Error. File \"public_accounts\" not found\n");
+		return -1;
+	}
+
+	while (feof(accounts) == 0 )
+	{
+		fgets(buffer, 256, accounts);
+		num ++;
+	}
+	if (num % 4 != 1)
+	{
+		printf("Accounts file is corrupted\n");
+		return -1;
+	}
+	if ((accounts = freopen("/usr/local/etc/sds/accounts", "rb+", accounts)) == NULL)
+	{
+		printf("Error reading accounts info\n");
+		return -1;
+	}
+	num = 0;
+
 	while (feof(accounts) == 0 && loginfound == 0)
 	{
 		fgets(buffer, 256, accounts);
 		if (num % 4 == 0)
+		{
+			for (int i=0; i<256; i++)
+			{
+				if (buffer[i] == 0x0A)
+					buffer[i]=0;
+			}
+			if (strcmp(buffer, login) == 0)
+				loginfound = 1;
+		}
+		num++;
+	}
+
+	if (loginfound == 1 && num != 0)
+	{
+		printf("Error. User %s already exists\n", login);
+		return -1;
+	}
+
+	num = 0;
+
+	while (feof(public) == 0 )
+	{
+		fgets(buffer, 256, public);
+		num ++;
+	}
+	if (num % 3 != 1)
+	{
+		printf("Public accounts file is corrupted\n");
+		return -1;
+	}
+	if ((public = freopen("/usr/local/etc/sds/public_accounts", "rb+", public)) == NULL)
+	{
+		printf("Error reading public accounts info\n");
+		return -1;
+	}
+	num = 0;
+
+	while (feof(public) == 0 && loginfound == 0)
+	{
+		fgets(buffer, 256, public);
+		if (num % 3 == 0)
 		{
 			for (int i=0; i<256; i++)
 			{
@@ -105,33 +176,6 @@ int SaveKeys (char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 	mpz_out_str(accounts, 16, yQ);
 	fputs("\n", accounts);
 	fclose(accounts);
-
-	if ((public = fopen("/usr/local/etc/sds/public_accounts", "rb+")) == NULL)
-	{
-		printf("Error. File \"public_accounts\" not found\n");
-		return -1;
-	}
-	while (feof(public) == 0 && loginfound == 0)
-	{
-		fgets(buffer, 256, public);
-		if (num % 3 == 0)
-		{
-			for (int i=0; i<256; i++)
-			{
-				if (buffer[i] == 0x0A)
-					buffer[i]=0;
-			}
-			if (strcmp(buffer, login) == 0)
-				loginfound = 1;
-		}
-		num++;
-	}
-
-	if (loginfound == 1 && num != 0)
-	{
-		printf("Error. User %s already exists\n", login);
-		return -1;
-	}
 
 	fseek(public, 0, SEEK_END);
 	fputs(login, public);
@@ -166,6 +210,23 @@ int GetUserKeys(char* login, mpz_t d, mpz_t xQ, mpz_t yQ)
 		printf("Error reading accounts info\n");
 		return -1;
 	}
+	while (feof(keys) == 0 )
+	{
+		fgets(buffer, 256, keys);
+		num ++;
+	}
+	if (num % 4 != 1)
+	{
+		printf("Accounts file is corrupted\n");
+		return -1;
+	}
+	if ((keys = freopen("/usr/local/etc/sds/accounts", "rb", keys)) == NULL)
+	{
+		printf("Error reading accounts info\n");
+		return -1;
+	}
+	num = 0;
+
 	while (feof(keys) == 0 && loginfound == 0)
 	{
 		fgets(buffer, 256, keys);
@@ -311,11 +372,7 @@ int main(int argc, char** argv)
 		printf("-h				Get help;\n");
 		printf("-ug <login>			Generate private and public keys for user and add user info to table;\n");
 		printf("-ds <login> <path to file>	Generate digital signature for chosen file using current parameters;\n");
-		printf("-p				Generate random parameters of digital signature and blank public user info table;\n");
-		printf("-p <path to file>		Use signature parameters and table from .sdsp file;\n");
 		printf("Note that person verifying your signature should be provided with same signature parameters and your user info shold be contained in his table.\n");
-		printf("In case of loosing this data, its backups are stored in ds_params.log file\n");
-		printf("Parameters used by default at the start of this program are contained in ds_params.spsd\n");
 		return 0;
 	}
 	//-h с лишними параметрами
@@ -380,6 +437,18 @@ int main(int argc, char** argv)
 
 			if (fail == 0)
 			{
+				fseek(target, 0, SEEK_END);
+				long fsize = ftell(target);
+				fseek(target, 0, SEEK_SET);
+				if (fsize == 0)
+				{
+					printf("Empty file\n");
+					fail += 1;
+				}
+			}
+
+			if (fail == 0)
+			{
 				//генерация подписи, добавление к файлу
 				unsigned char ds[64];
 				GenerateDS(p, a, b, m, q, xP, yP, d, xQ, yQ, ds, target);
@@ -401,27 +470,6 @@ int main(int argc, char** argv)
 	}
 	//кол-во параметров неверно
 	else if (strcmp(argv[1], "-ds") == 0 && argc != 4)
-	{
-		printf("Incorrect number of arguments\n");
-		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
-		return 0;
-	}
-
-	//генерация случ. параметров
-	if (strcmp(argv[1], "-p") == 0 && argc == 2)
-	{
-		printf("It doesnt work right now\n");
-		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
-		return 0;
-	}
-	//параметры из файла
-	else if (strcmp(argv[1], "-p") == 0 && argc == 3)
-	{
-		printf("It doesnt work right now\n");
-		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
-		return 0;
-	}
-	else if (strcmp(argv[1], "-p") == 0 && argc > 3)
 	{
 		printf("Incorrect number of arguments\n");
 		Clear_GMP(p, a, b, m, q, xP, yP, d, xQ, yQ);
